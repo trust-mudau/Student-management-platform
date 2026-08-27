@@ -6,9 +6,9 @@ const Faculty = require("../models/FacultyModel")
 const Department = require("../models/DepartmentModel")
 
 const signup = async (req, res) => {
-  const { firstName, lastName, password, email, facultyName, departmentName, role } = req.body
+  const { firstName, lastName, password, email, facultyName, departmentName } = req.body
 
-  console.log("Registration attempt:", { firstName, lastName, email, facultyName, departmentName, role })
+  console.log("Registration attempt:", { firstName, lastName, email, facultyName, departmentName })
 
   try {
     // Validate required fields
@@ -16,8 +16,14 @@ const signup = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" })
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({ message: "Password must be at least 6 characters" })
+    }
+
+    const normalizedEmail = email.trim().toLowerCase()
+
     // Check if user already exists
-    const userExists = await User.findOne({ email })
+    const userExists = await User.findOne({ email: normalizedEmail })
     if (userExists) return res.status(409).json({ message: "User already exists, please log in" })
 
     // Find faculty by name
@@ -65,24 +71,21 @@ const signup = async (req, res) => {
       firstName,
       lastName,
       password: hashedPassword,
-      email,
+      email: normalizedEmail,
       department: department._id,
       faculty: faculty._id,
-      role: role || "student",
+      // Public registration must never assign privileged roles.
+      role: "student",
     }
 
-    // Only generate regNo for students
-    if (!role || role === "student") {
-      try {
-        const regNo = await generateRegNo(facultyName, departmentName)
-        console.log("Generated regNo:", regNo)
-        userData.regNo = regNo
-      } catch (regNoError) {
-        console.error("Error generating registration number:", regNoError)
-        return res.status(500).json({ message: "Failed to generate registration number: " + regNoError.message })
-      }
+    try {
+      const regNo = await generateRegNo(facultyName, departmentName)
+      console.log("Generated regNo:", regNo)
+      userData.regNo = regNo
+    } catch (regNoError) {
+      console.error("Error generating registration number:", regNoError)
+      return res.status(500).json({ message: "Failed to generate registration number: " + regNoError.message })
     }
-    // For Admin and Lecturer roles, regNo will be undefined (not null)
 
     console.log("Creating user with data:", { ...userData, password: "[HIDDEN]" })
 
